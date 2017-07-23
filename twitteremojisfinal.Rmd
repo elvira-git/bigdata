@@ -1,0 +1,257 @@
+```{r}
+#used links
+#https://github.com/lyons7/emojidictionary
+#https://github.com/today-is-a-good-day/emojis
+#https://github.com/today-is-a-good-day/emojis/blob/master/emoji_analysis.R
+#https://www.r-bloggers.com/emojis-analysis-in-r/
+#https://github.com/lyons7/emojidictionary/blob/master/Sample%20R%20Code%20for%20using%20dictionary
+```
+
+
+## Processing the data
+```{r, echo=TRUE}
+library(twitteR)
+#search tweets in list format
+berlin <- searchTwitter("#berlin")
+#convert list to dataframe
+berlinDF<-twListToDF(berlin)
+```
+
+We have to transform emojis in order to analyze these. We use a CSV file from (http://publish.illinois.edu/katelyons/resources/). (The idea for this comes from [Kate Lyons & Jessica Peterka-Bonetta](http://opiateforthemass.es/articles/emoticons-in-R/). 
+
+```{r, echo=TRUE}
+emoticons <- read.csv("Decoded Emojis Col Sep.csv", header = T)
+```
+
+```{r, echo=TRUE}
+#to transform the emojis, you first need to transform the tweet data into ASCII:
+berlinDF$text <- iconv(berlinDF$text, from = "latin1", to = "ascii", 
+                    sub = "byte")
+```
+
+To 'count' the emojis, we used a find and replace function using the CSV file 'Decoded Emojis'. Here we are using the 
+[DataCombine package](http://www.inside-r.org/packages/cran/DataCombine/docs/FindReplace). It identifies emojis in tweeted Instragram posts and then replaces them with a prose version.
+
+```{r, echo=TRUE}
+library(DataCombine)
+emojireplace <- FindReplace(data = berlinDF, Var = "text", 
+                            replaceData = emoticons,
+                       from = "R_Encoding", to = "Name", 
+                       exact = FALSE)
+```
+
+```{r, echo=TRUE}
+#save file
+write.csv(emojireplace,file=paste("ALL",Sys.Date(),".csv"))
+```
+
+```{r}
+# load packages and set options
+options(stringsAsFactors = FALSE)
+library(dplyr)
+library(twitteR)
+library(stringr)
+library(rvest)
+library(Unicode)
+library(tm)
+library(ggplot2)
+
+Sys.setlocale(category = "LC_ALL", locale = "en_US.UTF-8")
+```
+##Utility functions
+
+```{r}
+# this function outputs the emojis found in a string as well as their occurences
+count_matches <- function(string, matchto, description, sentiment = NA) {
+  
+  vec <- str_count(string, matchto)
+  matches <- which(vec != 0)
+  
+  descr <- NA
+  cnt <- NA
+  
+  if (length(matches) != 0) {
+    
+    descr <- description[matches]
+    cnt <- vec[matches]
+    
+  } 
+  
+  df <- data.frame(text = string, description = descr, count = cnt, sentiment = NA)
+  
+  if (!is.na(sentiment) & length(sentiment[matches]) != 0) {
+    
+    df$sentiment <- sentiment[matches]
+    
+  }
+  
+  return(df)
+  
+}
+
+```
+
+```{r}
+# this function applies count_matches on a vector or texts and outputs a dataframe
+emojis_matching <- function(texts, matchto, description, sentiment = NA) {
+  
+  texts %>% 
+    lapply(count_matches, matchto = matchto, description = description, sentiment = sentiment) %>%
+    bind_rows
+  
+}
+
+```
+
+```{r}
+# function that separates capital letters hashtags
+hashgrep <- function(text) {
+  hg <- function(text) {
+    result <- ""
+    while(text != result) {
+      result <- text
+      text <- gsub("#[[:alpha:]]+\\K([[:upper:]]+)", " \\1", text, perl = TRUE)
+    }
+    return(text)
+  }
+  unname(sapply(text, hg))
+}
+
+```
+
+```{r}
+# tweets cleaning pipe
+cleanPosts <- function(text) {
+  clean_texts <- text %>%
+    gsub("<.*>", "", .) %>% # remove emojis
+    gsub("&amp;", "", .) %>% # remove &
+    gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "", .) %>% # remove retweet entities
+    gsub("@\\w+", "", .) %>% # remove at people
+    hashgrep %>%
+    gsub("[[:punct:]]", "", .) %>% # remove punctuation
+    gsub("[[:digit:]]", "", .) %>% # remove digits
+    gsub("http\\w+", "", .) %>% # remove html links
+    iconv(from = "latin1", to = "ASCII", sub="") %>% # remove emoji and bizarre signs
+    gsub("[ \t]{2,}", " ", .) %>% # remove unnecessary spaces
+    gsub("^\\s+|\\s+$", "", .) %>% # remove unnecessary spaces
+    tolower
+  return(clean_texts)
+}
+
+```
+
+```{r}
+# function that outputs a dataframe of emojis with their top 5 words (by frequency)
+wordFreqEmojis <- function(df, text = df$text, description = df$description, top = 5) {
+  
+  
+  lapply(unique(description), function(x) {
+    
+    dat <- df %>% 
+      filter(description == x)
+    
+    myCorpus <- Corpus(VectorSource(dat$text)) %>%
+      tm_map(removePunctuation) %>%
+      tm_map(stripWhitespace) %>%
+      tm_map(removeWords, stopwords("english"))
+    
+    dtm <- DocumentTermMatrix(myCorpus)
+    # find the sum of words in each Document
+    rowTotals <- apply(dtm , 1, sum)
+    dtm.new   <- dtm[rowTotals> 0, ]
+    # collapse matrix by summing over columns
+    freq <- colSums(as.matrix(dtm))
+    # create sort order (descending)
+    ord <- order(freq, decreasing=TRUE)
+    
+    list(emoji = rep(x, top), words = names(freq[ord][1:top]), frequency = freq[ord][1:top]) 
+    
+  }) %>% 
+    bind_rows
+  
+}
+
+```
+
+```{r}
+# read in emoji dictionary from CSV file provided by 
+# https://raw.githubusercontent.com/today-is-a-good-day/emojis/master/emojis.csv
+emDict_raw <- read.csv2("emojis.csv") %>% 
+  select(EN, ftu8, unicode) %>% 
+  rename(description = EN, r.encoding = ftu8)
+
+```
+
+```{r}
+# plain skin tones
+skin_tones <- c("light skin tone", 
+                "medium-light skin tone", 
+                "medium skin tone",
+                "medium-dark skin tone", 
+                "dark skin tone")
+
+```
+
+```{r}
+# remove plain skin tones and remove skin tone info in description
+emDict <- emDict_raw %>%
+  # remove plain skin tones emojis
+  filter(!description %in% skin_tones) %>%
+  # remove emojis with skin tones info
+  filter(!grepl(":", description)) %>%
+  mutate(description = tolower(description)) %>%
+  mutate(unicode = as.u_char(unicode))
+# all emojis with more than one unicode codepoint become NA 
+
+matchto <- emDict$r.encoding
+description <- emDict$description
+```
+
+```{r}
+# Let's analyze the tweets of Donald Trump
+sample_trump <- userTimeline(user = "realdonaldtrump", n = 500) %>%
+  twListToDF
+# convert to a format we can work with
+trump <- sample_trump %>% 
+  mutate(text = iconv(text, from = "latin1", to = "ascii", sub = "byte"))
+
+```
+
+```{r}
+# Which emojis does Donald Trump use the most (ranked by occurence)?
+rank <- emojis_matching(trump$text, matchto, description) %>% 
+  group_by(description) %>% 
+  summarise(n = sum(count)) %>%
+  arrange(-n)
+
+head(rank, 10)
+```
+
+
+```{r}
+# Which emojis are associated with which words in tweets of Donald Trump?
+trump_texts <- emojis_matching(trump$text, matchto, description) %>% 
+  select(-sentiment, -count) %>%
+  mutate(text = cleanPosts(text)) %>%
+  filter(text != "") %>% 
+  filter(!is.na(description))
+word_emojis <- wordFreqEmojis(trump_texts, trump_texts$text, trump_texts$description) %>% 
+  filter(!is.na(words))
+head(word_emojis, 10)
+```
+
+
+```{r}
+# When does Donald Trump tweet most with emojis?
+emojis_matching(trump$text, matchto, description) %>%
+  merge(trump %>% select(text, created), by = "text") %>% 
+  select(description, created) %>% 
+  mutate(weekday = weekdays(created)) %>% 
+  select(-created) %>% 
+  group_by(weekday) %>% 
+  summarise(n = n()) %>% 
+  arrange(-n)
+```
+
+
+
