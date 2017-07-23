@@ -15,10 +15,12 @@ library(Rfacebook)
 ```{r}
 #fb_oauth <- fbOAuth(app_id="333908270376474", app_secret="9f46b836ad0ca8f1b06b378fb9e105fe",extended_permissions = TRUE)
 
-token<- "EAACEdEose0cBAM1I10xPK9fdmfUF4LXilBSYhDZA7B8XRYi1ZBHN7iH5ZAV98kDSFmqH4k6IrgwmoB5WG6k2m7ATZApn2CpHKnK6Y4PNTbjAcqh8jhRIPIJqKSg6AZAZAZCvbsXJMaPB8l2oAPZABWxzwDTyPzZArIfvwFzegiBKuZA7QEtVVPLqDwmQzZAjT1q8ZAoZD"
-me<- getUsers("10204424657285652", token, private_info = TRUE) #ID from Graph API Explorer
+#temporal token
+token<- "xxxx"
+me<- getUsers("xxxxx", token, private_info = TRUE) #ID from Graph API Explorer
 
-fb_oauth<- fbOAuth(app_id="333908270376474",app_secret="9f46b836ad0ca8f1b06b378fb9e105fe",extended_permissions = TRUE)
+#long token
+fb_oauth<- fbOAuth(app_id="xxxxx",app_secret="xxxxx",extended_permissions = TRUE)
 
 save(fb_oauth, file="fb_oauth")
 load("fb_oauth")
