@@ -1,7 +1,7 @@
 ---
 title: "fb app"
 author: "Elvira Bekyrova"
-date: "7/15/2017"
+date: "6/15/2017"
 output: html_document
 ---
 
@@ -15,17 +15,18 @@ library(Rfacebook)
 ```{r}
 #fb_oauth <- fbOAuth(app_id="333908270376474", app_secret="9f46b836ad0ca8f1b06b378fb9e105fe",extended_permissions = TRUE)
 
-#temporal token
+#temporal token - insert your data
 token<- "xxxx"
 me<- getUsers("xxxxx", token, private_info = TRUE) #ID from Graph API Explorer
 
-#long token
+#long token - inster your data
 fb_oauth<- fbOAuth(app_id="xxxxx",app_secret="xxxxx",extended_permissions = TRUE)
 
 save(fb_oauth, file="fb_oauth")
 load("fb_oauth")
 
-friends<- getFriends(token, simplify = FALSE) #All Facebook friends whose data is accessible
+#Let's get data about your profile
+friends<- getFriends(token, simplify = FALSE) # all Facebook friends whose data is accessible
 #simplify = TRUE: only name
 #simplify = FALSE: name, gender, location, hometown, profile picture, relationship status
 
@@ -42,8 +43,8 @@ friends<- getSQL("SELECT uid2 FROM friend WHERE uid1=me()", token=fb_oauth)
 #Let's analyze BIPM page
 page <- getPage("masterbipm", token=fb_oauth, n=100)
 #Most liked post
-#most_liked_post = page[which.max(page$likes_count), ]
-#likes_all_posts = page[page$likes_count, ]
+most_liked_post = page[which.max(page$likes_count), ]
+likes_all_posts = page[page$likes_count, ]
 ```
 
 Analysis of BBC, NY Times and SpaceX
@@ -59,18 +60,8 @@ bbcpage_past <- getPage("bbcnews", token=fb_oauth, since="2014-01-31", until="20
 #Sort by most liked posts
 bbc_sort_by_likes = bbcpage[order(bbcpage$likes_count, decreasing = TRUE),] 
 
-# Based on 100 posts, most popular are:
-# Prince George http://bbc.in/2vJl2XO
-# Peggy, 86 https://www.facebook.com/bbcnews/videos/1479177572139344/
-# Chester Bennington’s music http://www.bbc.com/news/world-us-canada-40677254
-
-#Sort by most liked posts
+#Sort NY by most liked posts
 ny_sort_by_likes = nytpage[order(nytpage$likes_count, decreasing = TRUE),] 
-
-# Resignation of White House Press Secretary https://goo.gl/MLw6VN
-# HealthCare in the US https://goo.gl/XRRKVt
-# Kentucky Must Pay $224,000 After Dispute Over Same-Sex Marriage Licenses https://goo.gl/ePUxPH
-
 
 spacex_by_likes = spacexpage[order(spacexpage$likes_count, decreasing = TRUE),] 
 
@@ -117,6 +108,7 @@ bbcpast_mostlikes = summaryBy(likes_count ~ type, data = bbc2_past, FUN = list(m
 #Let's extract more posts for BBC
 bbcpage5k <- getPage("bbcnews", token=fb_oauth, n=5000) 
 bbcpage5k$day <- weekdays(as.Date(bbcpage5k$created_time))
+
 #Amount of posts per day
 likes_per_day = summaryBy(likes_count ~ day, data = bbcpage5k, FUN = list(mean, max, min))
 post_day = bbc %>% group_by(day) %>% summarise(no_rows = length(day))
@@ -151,14 +143,10 @@ plot_ly(
 
 #write.csv(bbc, file = "bbcposts.csv")
 
-#Barplots
-#bar_counts <- table(bbc$day, bbc$likes_count)
-#barplot(bar_counts)
-
 ```
 
 ```{r}
-#Decision Tree
+#Let's build a decision tree showing us what likes depend on the most
 DecisionTree <- rpart(likes_count ~ type + day, data=bbc, method="anova", control=rpart.control(minsplit=150, cp=0.001))
 #Plot tree 
 plot(DecisionTree, uniform=TRUE, main="Classification Type/Day", margin=0.2)
@@ -170,7 +158,6 @@ text(DecisionTree, use.n=TRUE, all=TRUE, cex=.5)
 library(doBy)
 bbc2 = bbc[- grep("photo", bbc$type),]
 bbc2$type = as.character(bbc2$type)
-
 
 #What types of posts bring the most likes on SpaceX?
 summaryBy(likes_count ~ type, data = spacexpage, FUN = list(mean, max, min, median, sd))
